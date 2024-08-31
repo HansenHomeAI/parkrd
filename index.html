@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000; /* Set background to black */
+            touch-action: none; /* Disable default touch behaviors */
+            user-select: none; /* Disable text selection */
+            -webkit-user-select: none; /* Safari specific styling */
+        }
+        #vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: linear-gradient(to top, black 0%, transparent 12%);
+            mix-blend-mode: multiply;
+        }
+    </style>
+</head>
+<body>
+    <div id="vignette"></div>
+    <div id="overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; color: white; font-size: 24px; font-family: Arial, sans-serif;">Lot #1</div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/",
+            "@lumaai/luma-web": "https://unpkg.com/@lumaai/luma-web@0.2.0/dist/library/luma-web.module.js"
+        }
+    }
+    </script>
+    <script type="module">
+        import { WebGLRenderer, PerspectiveCamera, Scene, Color, Vector3, SphereGeometry, MeshBasicMaterial, Mesh, Texture, PlaneGeometry, DoubleSide, MeshStandardMaterial } from 'https://unpkg.com/three@0.157.0/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.157.0/examples/jsm/controls/OrbitControls.js';
+        import { LumaSplatsThree } from '@lumaai/luma-web';
+
+        // Parameters
+        const parameters = {
+            camera: {
+                minY: -0.3,
+                maxZoomOut: 1000,
+                startPosition: { x: 0, y: 0.2, z: 2.5 },
+            },
+            scene: {
+                origin: { x: 0, y: -0.4, z: 0 },
+                maxDistanceFromCenter: 4.7,
+                targetLimit: {
+                    x: 0,
+                    z: 0
+                }
+            },
+            animation: {
+                autoRotate: true,
+                startRadius: 2.65,
+                speed: 0.003
+            },
+            rebound: {
+                speed: 0.2,
+                elasticity: 0.05
+            }
+        };
+
+        let renderer = new WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(new Color(0x000000)); // Renderer clear color set to black
+        renderer.setPixelRatio(window.devicePixelRatio * 0.8);
+        document.body.appendChild(renderer.domElement);
+
+        let scene = new Scene();
+
+        let camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, parameters.camera.maxZoomOut);
+        camera.position.set(parameters.camera.startPosition.x, parameters.camera.startPosition.y, parameters.camera.startPosition.z);
+
+        let controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+
+        let sceneCenter = new Vector3(parameters.scene.origin.x, parameters.scene.origin.y, parameters.scene.origin.z);
+
+        controls.addEventListener('change', () => {
+            // Restrict camera Y minimum
+            if (camera.position.y < parameters.camera.minY) {
+                camera.position.y += (parameters.camera.minY - camera.position.y) * parameters.rebound.speed;
+            }
+
+            // Restrict target movement on X and Z axes with elastic rebound
+            const clampRebound = (current, min, max) => {
+                let clamped = Math.min(Math.max(current, min), max);
+                return clamped + (current - clamped) * parameters.rebound.elasticity;
+            };
+            controls.target.x = clampRebound(controls.target.x, -parameters.scene.targetLimit.x, parameters.scene.targetLimit.x);
+            controls.target.y = parameters.scene.origin.y; // Set target Y limit
+            controls.target.z = clampRebound(controls.target.z, -parameters.scene.targetLimit.z, parameters.scene.targetLimit.z);
+
+            // Restrict camera distance from the scene center
+            if (camera.position.distanceTo(sceneCenter) > parameters.scene.maxDistanceFromCenter) {
+                let direction = new Vector3().subVectors(camera.position, sceneCenter).normalize();
+                camera.position.copy(direction.multiplyScalar(parameters.scene.maxDistanceFromCenter).add(sceneCenter));
+            }
+        });
+
+        let splat = new LumaSplatsThree({
+            source: 'https://lumalabs.ai/embed/645b125d-1cb9-43e6-9667-f1c649743eaa?mode=sparkles&background=%23ffffff&color=%23000000&showTitle=true&loadBg=true&logoPosition=bottom-left&infoPosition=bottom-right&cinematicVideo=undefined&showMenu=false',
+            particleRevealEnabled: true,
+            particleRevealDuration: 3.33 // Speed up by 50%
+        });
+        scene.add(splat);
+
+
+
+        window.addEventListener('resize', function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }, false);
+
+        let angle = 0;
+        let autoRotate = parameters.animation.autoRotate;
+
+        function animate() {
+            if (autoRotate) {
+                angle += parameters.animation.speed;
+                camera.position.x = Math.sin(angle) * parameters.animation.startRadius;
+                camera.position.z = Math.cos(angle) * parameters.animation.startRadius;
+                camera.lookAt(scene.position); // Ensure the camera always looks at the scene
+            }
+           // Update text orientation to always face the camera
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        
+
+controls.addEventListener('start', () => autoRotate = false);
+        window.addEventListener('touchstart', () => autoRotate = false);
+
+        animate();
+    </script>
+    <script>
+
+let targetFPS = 60; // Target FPS for optimal performance
+let currentFPS = 60; // Initially assume 60 FPS for optimal performance
+let maxPixelRatio = 2; // Maximum pixel ratio for high-performance devices
+let smoothedPixelRatio = window.devicePixelRatio; // Initially set to device pixel ratio
+let smoothingFactor = 0.1; // Smoothing factor for adjusting pixel ratio
+
+// Function to measure FPS
+function measureFPS() {
+    // Measure FPS here and update currentFPS variable
+    // This could be done by calculating the time between frames
+    // For simplicity, let's assume currentFPS is updated externally
+}
+
+// Function to adjust pixel ratio based on measured FPS
+function adjustPixelRatio() {
+    let adjustmentFactor = Math.max(0.3, Math.min(1, currentFPS / targetFPS)); // Clamp adjustment factor between 0.3 and 1
+    let newPixelRatio = Math.floor(window.devicePixelRatio * adjustmentFactor);
+    
+    // Smooth the adjustment using exponential smoothing
+    smoothedPixelRatio += (newPixelRatio - smoothedPixelRatio) * smoothingFactor;
+    
+    // Clamp the smoothed pixel ratio to avoid extreme values
+    smoothedPixelRatio = Math.max(1, Math.min(maxPixelRatio, smoothedPixelRatio));
+    
+    renderer.setPixelRatio(smoothedPixelRatio);
+}
+
+// Function to animate the scene
+function animate() {
+    measureFPS(); // Measure FPS before rendering each frame
+    adjustPixelRatio(); // Adjust pixel ratio based on measured FPS
+    // Render your scene here
+    requestAnimationFrame(animate);
+}
+
+    </script>
+
+</body>
